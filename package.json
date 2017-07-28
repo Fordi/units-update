@@ -1,0 +1,31 @@
+{
+  "name": "units-update",
+  "version": "1.0.0",
+  "description": "Gets a currency list for units; meant to be a drop-in replacement for units_cur",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Fordi/units-update.git"
+  },
+  "keywords": [
+    "gnuunits",
+    "units"
+  ],
+  "bin": {
+    "units-update": "./bin/units-update"
+  },
+  "author": "Bryan Elliott <fordiman@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Fordi/units-update/issues"
+  },
+  "homepage": "https://github.com/Fordi/units-update#readme",
+  "dependencies": {
+    "node-fetch": "^1.7.1",
+    "unidecode": "^0.1.8",
+    "xml-parse": "^0.3.0"
+  }
+}

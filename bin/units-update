@@ -1,0 +1,136 @@
+#!/usr/bin/env node
+
+const HOME = process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];
+
+const fetch = require('node-fetch');
+const xml = require('xml-parse');
+const unidecode = require('unidecode')
+const fs = require('fs');
+
+var metals = {
+    XAU: 'goldprice',
+    XAG: 'silverprice',
+    XPD: 'palladiumprice',
+    XPT: 'platinumprice'
+};
+var uni = [];
+var defs = [];
+var convs = [];
+var cryptodefs = [];
+var cryptoconvs = [];
+var metalconvs = [];
+var ctr = 0;
+
+var filename = process.argv[2] || HOME + '/.currencies';
+
+function set() {
+    ctr++;
+}
+function Assignment(from, to) {
+    this.from = from;
+    this.to = to;
+    this.constructor.max = Math.max(from.length, this.constructor.max);
+}
+Assignment.max = -Infinity;
+Assignment.prototype.toString = function () {
+    var max = this.constructor.max + 1;
+    var pad = new Array(max - this.from.length + 1).join(' ');
+    return this.from + pad + this.to;
+};
+function check() {
+    if (ctr > 0) { 
+        ctr--;
+        
+        if (ctr === 0) {
+            var out = [];
+            if (uni.length) {
+                out.push('# Unicode Currency Names\n\n!utf8\n');
+                out = out.concat(uni);
+                out.push('!endutf8\n')
+            }
+            out.push('# ISO Currency Codes\n');
+            out = out.concat(defs);
+            out.push('\n# Currency exchange rates from Time Genie (www.timegenie.com)\n');
+            out = out.concat(convs);
+
+            out.push('\n# Cryptocurrency Codes\n');
+            out = out.concat(cryptodefs);
+            out.push('\n# Cryptocurrency exchange rates from coinmarketcap.com\n');
+            out = out.concat(cryptoconvs);
+            
+            out.push('\n# Precious metals prices from http://services.packetizer.com/spotprices/\n');
+            out = out.concat(metalconvs);
+            fs.writeFile(filename, out.join('\n'), (err) => {
+                if (err) {
+                    throw err;
+                }
+                console.log('Curencies in `' + filename + '` updated: ' + convs.length + ' ISO currencies, ' + cryptoconvs.length + ' cryptocurrencies, ' + metalconvs.length + ' precious metals');
+            });
+        }
+    }
+}
+
+set();
+fetch('https://api.coinmarketcap.com/v1/ticker/')
+    .then(function (res) {
+        return res.json();
+    }).then(function (json) {
+        json.forEach((curr) => {
+            curr.symbol = curr.symbol.replace(/-/g, '_');
+            cryptodefs.push(new Assignment('$' + curr.symbol + '$','$' + curr.id + '$'));
+            cryptoconvs.push(new Assignment('$' + curr.id + '$', curr.price_usd + ' US$'));
+        });
+        check();
+    });
+
+set();
+fetch('https://rss.timegenie.com/forex.xml')
+    .then(function (res) {
+        return res.text();
+    }).then(function (xmlStr) {
+        var dom = new xml.DOM(xml.parse(xmlStr));
+        var items = dom.document.getElementsByTagName('data');
+        items.forEach((item) => {
+            var curr = item.childNodes.reduce((obj, child) => {
+                if (child.type === 'text') return obj;
+                obj[child.tagName] = child.innerXML.replace(/\&amp;/g, '&');
+                return obj;
+            }, {});
+            curr.id = curr.description.toLowerCase().replace(/\s+/g, '');
+            if (curr.id === 'anguilla(ecd)') {
+                curr.id = 'eastcaribbeandollar';
+            }
+
+            var u = unidecode(curr.id);
+            if (unidecode(curr.id) !== curr.id) {
+                uni.push(curr.id + ' ' + u);
+                curr.id = u;
+            }
+            if (curr.id === 'USD') {
+                defs.push(new Assignment(curr.code, curr.id));
+                defs.push(new Assignment('US$', curr.id));
+                convs.push('EUR', curr.rate);
+            } else if (curr.code === 'EUR') {
+                return;
+            } else if (metals[curr.code]) {
+                defs.push(new Assignment(curr.code, curr.id));
+                defs.push(new Assignment(curr.id, '1 ' + metals[curr.code] + ' * 1 troyounce'));
+                defs.push(new Assignment(curr.code, metals[curr.code]));
+            } else {
+                defs.push(new Assignment(curr.code, curr.id));
+                convs.push(new Assignment(curr.id, '1|' + curr.rate + ' euro'));
+            }
+        });
+        check();
+    });
+
+set();
+fetch('http://services.packetizer.com/spotprices/?f=json')
+    .then((res) => { return res.json(); })
+    .then((json) => {
+        Object.keys(json).forEach((key) => {
+            if (key === 'date') return;
+            metalconvs.push(new Assignment(key + 'price', json[key] + ' US$/troyounce'));
+        });
+        check();
+    });
